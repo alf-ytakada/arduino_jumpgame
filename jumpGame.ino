@@ -10,6 +10,11 @@
 #define DI_PIN    9
 #define WAIT      0
 
+// 操作系
+#define LEFT_PIN    2
+#define CENTER_PIN  3
+#define RIGHT_PIN   4
+
 #define SCREEN_W 140
 #define SCREEN_H 48
 
@@ -28,6 +33,8 @@ public:
   int score;
   // 現在乗っているボード
   pos_t current_position;
+  // 現在乗っているボードのindex
+  int current_board_idx;
   // 現在の高さ
   int current_height;
   // ゲームオーバーフラグ
@@ -49,13 +56,13 @@ public:
 
   void init() {
     score = 0;
-    current_position  = pos_center;
     current_height    = 0;
     current_board_idx = 0;
     game_over         = false;
     step              = kStepMax;
 
     frames_till_step_down = 10;
+    is_jumping        = false;
     
     int i;
     int seed  = analogRead(0);
@@ -64,16 +71,21 @@ public:
     for (i = 0 ; i < kBoardCount ; i++) {
       boards[i] = (pos_t)(random(0, 3));
     }
+    current_position  = boards[0];
   }
 
   // ジャンプする
   void jump(pos_t new_pos) {
     if (is_jumping) return;
-    if (current_board_idx == kBoardCount)  return;
+    Serial.println(String("jump! pos = ") + (int)new_pos);
+    
+    if (current_board_idx == kBoardCount -1)  return;
     is_jumping    = true;
     new_height    = current_height  + 1;
     new_position  = new_pos;
     frames_after_jump = 0;
+    diff_lr       = 0;
+    diff_ud       = 0;
     // 加速度計算
     setVelocity(current_position, new_position);
   }
@@ -84,9 +96,9 @@ public:
     
     // 移動処理
     frames_after_jump++;
-    diff_lr += lr_velocity;
-    diff_ud += ud_velocity;
-    ud_velocity -= kGravityAccel;
+    diff_lr     += lr_velocity;
+    diff_ud     += ud_velocity;
+    ud_velocity += kGravityAccel;
 
     // 着地判定
     if (frames_after_jump == kJumpingFrame) {
@@ -107,6 +119,7 @@ public:
 
   // 毎フレームの処理
   void move() {
+    this->jumping();
     if (--frames_till_step_down == 0) {
       // TODO: ここの早さでLvを決める
       frames_till_step_down = 10;
@@ -130,14 +143,15 @@ public:
   }
   
   // 現在の座標
-  void currentDisplayPos(int *x, int *y) {
+  // ※ゲーム盤面上の位置を示す
+  const void currentBoardPos(float *x, float *y) const {
     if (is_jumping) {
-      *x  = (int)diff_lr + base_lr(current_position);
-      *y  = (int)diff_ud + base_height();
+      *x  = diff_lr + base_lr(current_position);
+      *y  = diff_ud + base_height() + current_board_idx;
     }
     else {
-      *x  = base_lr(current_position);
-      *y  = base_height();
+      *x  = (float)base_lr(current_position);
+      *y  = (float)base_height() + current_board_idx;
     }
     
   }
@@ -145,8 +159,6 @@ public:
   //////////////////////////////////
   // private
 private:
-  // 現在乗っているボードのindex
-  int current_board_idx;
   // ジャンプ中？
   bool is_jumping;
   // ジャンプ中：次の位置
@@ -159,7 +171,7 @@ private:
   float lr_velocity;
   // ジャンプ中：上下方向の速度
   float ud_velocity;
-  // 現在の高さからの座標差分：上下
+  // 現在の高さからの座標差分：左右
   float diff_lr;
   // 現在の高さからの座標差分：上下
   float diff_ud;
@@ -167,34 +179,31 @@ private:
   int frames_till_step_down;
   
 
-  // 約7フレーム後に、+10の位置に辿り着く
+  // 7フレーム後に、+1の位置に辿り着く
   // ジャンプ時の初速
-  const int kJumpVelocity = 8;
+  const float kJumpVelocity = 0.4928;
   // ジャンプ時の重力加速度
-  const int kGravityAccel = 1;
+  const float kGravityAccel = -0.1;
   // 次の台にのるまでの時間(frame)
   const int kJumpingFrame  = 7;
 
   // ジャンプ開始時の速度設定
   void setVelocity(pos_t old_pos, pos_t new_pos) {
     // 左右
-    if (old_pos < new_pos) {
-      lr_velocity = ((float)SCREEN_H / kJumpingFrame) * (new_pos - old_pos);
-    }
+    lr_velocity = ((int)new_pos - (int)old_pos) / (float)kJumpingFrame;
+    
     // 上下
-    ud_velocity = kJumpingFrame;
+    ud_velocity = kJumpVelocity;
   }
 
   // 基準 lr
-  int base_lr(pos_t pos) {
-    if (pos == pos_left)    return SCREEN_H / 8;
-    if (pos == pos_center)  return (SCREEN_H / 8) * 4;
-    if (pos == pos_right)   return (SCREEN_H / 8) * 7;
+  int base_lr(pos_t pos) const {
+    return (int)pos;
   }
 
   // 基準 height
-  int base_height() {
-    return (SCREEN_W / 5) * 2;
+  int base_height() const {
+    return 0;
   }
 
   // ボードを次に進める
@@ -211,52 +220,12 @@ private:
 
 void updateScreen();
 
-
-class Ball {
-  public:
-  // 位置
-  int x,y;
-  // 半径
-  int r;
-  Ball() : x((SCREEN_W - 5)/2), y((SCREEN_H - 5)/2), r(5) {
-    
-  }
-  void move(int dx, int dy) volatile {
-    int moved_x = x + dx;
-    int moved_y = y + dy;
-    x = this->restricted_pos(x + dx, 0, SCREEN_W);
-    y = this->restricted_pos(y + dy, 0, SCREEN_H);
-  }
-
-  int restricted_pos(int new_pos, int min, int max) volatile {
-    if (new_pos - r < 0) {
-      return r;
-    }
-    else if (new_pos + r > SCREEN_W) {
-      return SCREEN_W - r;
-    }
-    else {
-      return new_pos;
-    }    
-  }
-  
-};
-
-volatile Ball ball;
-// 割り込み
-void intLeft() {
-  ball.move(-1, 0);
-  updateScreen();
-}
-
-void intRight() {
-  ball.move(1, 0);
-  updateScreen();
-}
-
+///////////////
+// スクリーン描画
 void updateScreen(const JumpGame &g) {
   MGLCD.ClearScreen();
 
+  //////////////////////////////
   // ボード描画
   int i;
   // 今回は縦向きに使うので、x座標が上、y座標が右, 左下が原点
@@ -266,11 +235,27 @@ void updateScreen(const JumpGame &g) {
   
   for (i = 0 ; i < g.kBoardCount; i++) {
     pos_t pos = g.boards[i];
-    int left  = i * stepH + step_down_diff + 10;
-    int right = stepW * (0.5 + (int)pos);
-    MGLCD.FillRect(left, right, left + 1, right + stepW);
+    int height  = i * stepH + step_down_diff + 10;
+    int left    = stepW * (0.5 + (int)pos);
+    MGLCD.FillRect(height, left, height + 1, left + stepW);
     //Serial.println(String(i) + " : " + (int)pos);
   }
+  //////////////////////////////
+  // 自キャラ描画
+  float char_board_pos_left;
+  float char_board_pos_height;
+  g.currentBoardPos(&char_board_pos_left, &char_board_pos_height);
+  Serial.println(String("char (x,y) = ") + char_board_pos_left + ", " + char_board_pos_height);
+  
+  //int height  = g.current_board_idx * stepH + step_down_diff + 10;
+  //int left    = stepW * (1 + (int)(g.current_position));
+  int height  = char_board_pos_height * stepH + step_down_diff + 10;
+  int left    = stepW * (1 + char_board_pos_left);
+  int r       = 3;
+  MGLCD.Circle(height + r + 1, left + r/2, r);
+  
+  //////////////////////////////
+  
   
   //MGLCD.FillCircle(ball.x, ball.y, ball.r);
   //Serial.println(String("(x, y) = ") + ball.x + "," + ball.y);
@@ -307,8 +292,9 @@ void setup() {
   MGLCD.Reset();
   MGLCD.print("Hello, World! FugaPiyo" + String("hohoho"));
   
-  pinMode(2, INPUT_PULLUP);
-  pinMode(3, INPUT_PULLUP);
+  pinMode(LEFT_PIN, INPUT_PULLUP);
+  pinMode(CENTER_PIN, INPUT_PULLUP);
+  pinMode(RIGHT_PIN, INPUT_PULLUP);
   Serial.begin(9600);
   Serial.println("start");
 
@@ -317,16 +303,22 @@ void setup() {
 }
 
 void loop() {
-  if (pressed(3)) {
-    game->jump(pos_right);
-  }
-  if (pressed(2)) {
+  if (pressed(LEFT_PIN)) {
+    Serial.println("left");
     game->jump(pos_left);
+  }
+  else if (pressed(CENTER_PIN)) {
+    Serial.println("center");
+    game->jump(pos_center);
+  }
+  else if (pressed(RIGHT_PIN)) {
+    Serial.println("right");
+    game->jump(pos_right);
   }
 
   game->move();
   updateScreen(*game);
-  delay(100);
+  delay(50);
 //MGLCD.Circle(60,23,20);
 //delay(1000);
 }
