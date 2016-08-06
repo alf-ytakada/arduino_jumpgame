@@ -20,16 +20,16 @@
 
 // MGLCD_SpiPin4の4つの引数SCK_PIN、MOSI_PIN、CS_PIN、およびDI_PINは、
 // それぞれSCK信号(SCLK信号)、MOSI信号(SDI信号)、/CS信号、RS信号を、Arduinoのどのピンに接続するかを表しています。
-#define SCK_PIN  13
-#define MOSI_PIN 11
-#define CS_PIN   10
-#define DI_PIN    9
+#define SCK_PIN   6
+#define MOSI_PIN  5
+#define CS_PIN    8
+#define DI_PIN    7
 #define WAIT      0
 
 // 操作系
-#define LEFT_PIN    2
-#define CENTER_PIN  3
-#define RIGHT_PIN   4
+#define LEFT_PIN    9
+#define CENTER_PIN  10
+#define RIGHT_PIN   11
 
 #define SCREEN_W 140
 #define SCREEN_H 48
@@ -127,31 +127,29 @@ public:
         current_position  = new_position;
         current_board_idx++;
         score++;
-        
+
+        // ※100になっても特にスピードは上がらない。
         if (current_height >= 100) {
           current_frames_till_step_down = kMaxFramesTillStepDown - 10;
         }
         else if (current_height >= 50) {
           current_frames_till_step_down = kMaxFramesTillStepDown - 9;
         }
-        else if (current_height >= 40) {
+        else if (current_height >= 30) {
           current_frames_till_step_down = kMaxFramesTillStepDown - 8;
         }
-        else if (current_height >= 30) {
+        else if (current_height >= 20) {
           current_frames_till_step_down = kMaxFramesTillStepDown - 7;
         }
-        else if (current_height >= 20) {
+        else if (current_height >= 10) {
           current_frames_till_step_down = kMaxFramesTillStepDown - 6;
         }
-        else if (current_height >= 10) {
-          current_frames_till_step_down = kMaxFramesTillStepDown - 5;
-        }
         else if (current_height >= 5) {
-          current_frames_till_step_down = kMaxFramesTillStepDown - 3;
+          current_frames_till_step_down = kMaxFramesTillStepDown - 4;
         }
 
         frames_till_step_down = current_frames_till_step_down;
-        Serial.println(String("current frames_till_step_down = ") + frames_till_step_down);
+        //Serial.println(String("current frames_till_step_down = ") + frames_till_step_down);
       }
       else {
         // 落ちた
@@ -309,6 +307,7 @@ void updateScreen(const JumpGame &g) {
     MGLCD.FillRect(height, left, height + 1, left + stepW);
     //Serial.println(String(i) + " : " + (int)pos);
   }
+  
   //////////////////////////////
   // 自キャラ描画
   float char_board_pos_left;
@@ -316,8 +315,6 @@ void updateScreen(const JumpGame &g) {
   g.currentBoardPos(&char_board_pos_left, &char_board_pos_height);
   //Serial.println(String("char (x,y) = ") + char_board_pos_left + ", " + char_board_pos_height);
   
-  //int height  = g.current_board_idx * stepH + step_down_diff + 10;
-  //int left    = stepW * (1 + (int)(g.current_position));
   int height  = char_board_pos_height * stepH + step_down_diff + 10;
   int left    = stepW * (1 + char_board_pos_left);
   int r       = 3;
@@ -326,11 +323,6 @@ void updateScreen(const JumpGame &g) {
   //////////////////////////////
   // Score
   drawScore(SCREEN_W - 20, 2, g.score);
-  //drawScore(40, 10, 1034);
-  
-  
-  //MGLCD.FillCircle(ball.x, ball.y, ball.r);
-  //Serial.println(String("(x, y) = ") + ball.x + "," + ball.y);
 }
 
 // ボタンが押されたか？
@@ -397,8 +389,6 @@ void loop() {
   }
   updateScreen(*game);
   delay(20);
-//MGLCD.Circle(60,23,20);
-//delay(1000);
 }
 
 
